@@ -4,18 +4,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# This script creates a build subdirectory called "build_asmjs" and builds Hermes inside
-# it. The result (hermes.js, hermes.js.mem) will be under "build_asmjs/bin".
-# It requires two parameters:
-#  - the path to Emscripten, so that it can find
+# This script creates a build subdirectory called "build_wasm" and builds Hermes 
+# inside it. The result (hermes.js, hermes.wasm) will be under "build_wasm/bin".
+# It requires three parameters:
+# - the path to Emscripten, so that it can find
 #   "emscripten/cmake/Modules/Platform/Emscripten.cmake" relative to it
-#  - the path to the Hermes source tree
+# - the path to the Hermes source tree
+# - the path to a host hermesc to build internal bytecode where it can find
+#   "ImportHermesc.cmake" relative to it
 #
-# In the short term, there will be an attempt made to maintain a resonably up-to-date copy
-# of the compiled result here:
-#   https://tmikov.github.io/hermes-explorer-page/hermes.js
-#   https://tmikov.github.io/hermes-explorer-page/hermes.js.mem
-# So generating the website doesn't always require Emscripten and building Hermes.
+# An example of usage:
+#   ./build-hermes.sh ~/github/emsdk/upstream/ ~/github/hermes $H_HOST_HERMESC 
 
 set -e
 
@@ -27,20 +26,31 @@ shift
 HERMES_PATH="$1"
 shift
 
+[ -z "$1" ] && echo "Host Hermesc path required" && exit 1
+HOST_HERMESC_PATH="$1"
+shift
+
 FLAGS=""
-FLAGS="$FLAGS -s WASM=0"
+FLAGS="$FLAGS -s WASM=1"
 FLAGS="$FLAGS -s ALLOW_MEMORY_GROWTH=0"
 FLAGS="$FLAGS -s TOTAL_MEMORY=33554432"
-FLAGS="$FLAGS -s MODULARIZE=1 -s EXPORT_NAME=createApp"
+FLAGS="$FLAGS -s MODULARIZE=1 -s EXPORT_NAME=createHermes"
 FLAGS="$FLAGS -s INVOKE_RUN=0"
 FLAGS="$FLAGS -s EXIT_RUNTIME=1"
 FLAGS="$FLAGS -s NODERAWFS=0"
 FLAGS="$FLAGS -s EXTRA_EXPORTED_RUNTIME_METHODS=[callMain,FS]"
 
-mkdir build_asmjs && cd build_asmjs
+# configure
+mkdir build_wasm && cd build_wasm
 cmake "$HERMES_PATH" \
     -DCMAKE_TOOLCHAIN_FILE="$EMS_PATH/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
     -DCMAKE_BUILD_TYPE=MinSizeRel \
+    -DIMPORT_HERMESC:PATH="$HOST_HERMESC_PATH/ImportHermesc.cmake" \
     -DCMAKE_EXE_LINKER_FLAGS="$FLAGS"
 
+# build
 make -j hermes
+
+# copy the artifacts to static folder
+cp build_wasm/bin/hermes.js static/hermes.js
+cp build_wasm/bin/hermes.wasm static/hermes.wasm
